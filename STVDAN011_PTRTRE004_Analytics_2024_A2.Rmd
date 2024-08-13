@@ -1,0 +1,496 @@
+---
+output: 
+  pdf_document:
+    highlight: zenburn
+header-includes:
+  - \newcommand{\bs}[1]{\boldsymbol{#1}}
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{=tex}
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    \includegraphics[width=0.6\textwidth]{UCT.jpg}\par
+    \vspace{1cm}
+    {\LARGE\bfseries Analytics, Assignment 2\par}
+    \vspace{0.5cm}  % Added spacing here
+    \hrule  % Added horizontal line
+    \vspace{0.5cm}  % Added spacing here
+    {\Large Author(s): 
+    \begin{tabular}{ll}
+      Stevenson Daniela & STVDAN011 \\
+      Petersen Trentin & PTRTRE004\\
+    \end{tabular}
+    \par}
+    \vfill
+    {\large \today\par}
+\end{titlepage}
+```
+
+------------------------------------------------------------------------
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,echo=FALSE,warning=FALSE,message=FALSE}
+library(colorspace)
+library(knitr)
+color.gradient = function(x, colors=c('magenta','white','lightblue'), colsteps=100)
+{
+  colpal = colorRampPalette(colors)
+  return( colpal(colsteps)[ findInterval(x, seq(min(x),max(x), length=colsteps)) ] )
+}
+
+dat = read.table('SpamBotData_2024.txt', h = TRUE, stringsAsFactors = TRUE)
+attach(dat)
+```
+
+# (a)
+
+```{r}
+#Setting Grey = 1, Blue = 2, Red = 3 to keep ordinal order
+dat$Lure_Flag = as.numeric(factor(dat$Lure_Flag,levels = c( "grey","blue","red")))
+
+#Setting Negative = 1, Neutral = 2, Positive = 3 to keep ordinal order 
+dat$Sentiment = as.numeric(factor(dat$Sentiment,levels = c( "Negative","Neutral","Positive")))
+
+#Setting Human = 0 and Robot = 1
+dat$Spam_Bot  = as.numeric(factor(dat$Spam_Bot,levels = c( "Human","Robot")))-1
+
+head_df = (head(dat,4))
+kable(head_df,caption="The first four rows of the input matrix showing the new encodings.")
+```
+
+# (b)
+
+```{r}
+
+g = function(AL,Y)
+  {
+    #Ensuring that all 0s are set to 1e-7 and all 1s are set to 1-1e-7 within AL    
+    AL=ifelse(AL == 0, 1e-7, ifelse(AL == 1, 1 - 1e-7, AL))
+    
+    return(-(1/length(AL))*sum(Y*log(AL)+(1-Y)*log(1-AL)))
+  
+  }
+```
+
+Potential numeric pitfalls arise in the evaluation of this objective
+function when $\hat{y}_i=1$ or $\hat{y}_i=0$, as this can lead to the
+term $log(0)$ which returns -Inf. To avoid this we can ensure that
+$0<\hat{y}_i<1$ where $\hat{y}_i\in AL$.
+
+\newpage
+
+# (c)
+
+Let $\bs{X}$ be the combined input matrix. This is formed by
+concatenating the input matrices $\bs{U}$ and $\bs{V}$. This gives, $$
+\begin{aligned}
+\bs{X} = [\bs{U} \,|\, \bs{V}].
+\end{aligned}
+$$ Where, $$\begin{aligned}
+\bs{A^0} &= \bs{X^T} = [\bs{x_{i1}}, \bs{x_{i2}}, \ldots, \bs{x_{iN}}].
+\end{aligned}
+$$ And,
+$\begin{aligned} \bs{x_i^T} = [u_{i1}, u_{i2}, v_{i1}, v_{i2}]. \end{aligned}$
+\newline
+
+As $\bs{U}$ and $\bs{V}$ denote $N \times 2$ matrices, $\bs{X}$ denotes
+a $N \times 4$ matrix. This is consistent with how the data consists of
+$p = 4$ inputs, when combining the two hemispheres.
+
+The first hidden layer contains $\bs{W_1}$ as the weight matrix. This is
+a block diagonal matrix combining $\bs{W_{1u}}$ and $\bs{W_{1v}}$. Here
+$\bs{W_{1u}}$ and $\bs{W_{1v}}$ are both $2 \times m$ matrices, and
+$\bs{0}$ represents matrices of zeros of the same dimensions. Thus,
+$\bs{W_{1}}$ is a $4 \times 2m$ matrix, $$
+\bs{W_1} = \begin{bmatrix}
+\bs{W_{1u}} & \bs{0} \\
+\bs{0} & \bs{W_{1v}}
+\end{bmatrix}.
+$$
+
+The second hidden layer weight matrix $\bs{W_2}$ is a block diagonal
+matrix combining $\bs{W_{2u}}$ and $\bs{W_{2v}}$. Here $\bs{W_{2u}}$ and
+$\bs{W_{2v}}$ are both $m \times 1$ matrices (i.e. vectors), and
+$\bs{0}$ represents matrices of zeros of the same dimensions. Thus,
+$\bs{W_{2}}$ is a $2m \times 2$ matrix, $$
+\bs{W_2} = \begin{bmatrix}
+\bs{W_{2u}} & \bs{0} \\
+\bs{0} & \bs{W_{2v}}
+\end{bmatrix}
+.$$
+
+The third weight matrix $\bs{W_3}$ ($2 \times 1$ matrix) connects the
+two nodes in the second hidden layer to the single output node in the
+third layer. There is no longer hemisphere separation at this point.
+
+$$
+\bs{W_3} = \begin{bmatrix}
+w_{3u} & w_{3v}
+\end{bmatrix}.
+$$
+
+The first hidden layer's bias vector $\bs{b^1}$ ($2m \times 1$ matrix)
+combines $\bs{b^{1u}}$ and $\bs{b^{1v}}$. The second hidden layer's bias
+vector $\bs{b^2}$ combines $b^{2u}$ and $b^{2v}$. The bias for the
+output layer, $b^3$, is scalar. The bias vectors are, $$
+\bs{b^1} = [\bs{b^{1u}} | \bs{b^{1v}}]^T \text{ and }
+\bs{b^2} = [b^{2u} , b^{2v}]^T.
+$$
+
+The updating equations in matrix form are, $$
+\begin{aligned}
+\bs{A^l} &= \sigma_l \left( \bs{W_l^T A^{l-1}} + \bs{b^l} \, \bs{1^T} \right), \; l = 1,2,3.\\
+\end{aligned}
+$$ Thus, we may evaluate the predictions simultaneously for all
+observations $i =1,2,\ldots, N$.
+
+For example, the first hidden layer's output, $\bs{A^1}$, is now, $$
+\begin{aligned}
+\bs{A^1} &= \sigma_1(\bs{W_1^T A^0} + \bs{b^1}\;\bs{1^T})\\
+&= [\bs{a_1^{1}}, \bs{a_2^{1}}, \ldots, \bs{a_{N}^{1}}]
+\end{aligned}
+$$ where,
+$\bs{a_i^1}=[{a_{i1}^{1u}}, \ldots, {a_{im}^{1u}}, {a_{i1}^{1v}}, \ldots, {a_{im}^{1v}}]^T$.
+
+The second hidden layer weight matrix $\bs{W_2}$ and bias vector
+$\bs{b_2}$ yield the output $\bs{A^2}$ ($2 \times N$ matrix),
+
+$$
+\begin{aligned}
+\bs{A^2} &= \sigma_2(\bs{W_2^T A^1} + \bs{b^2}\;\bs{1^T}))\\
+&= [\bs{a_1^{2}}, \bs{a_2^{2}}, \ldots, \bs{a_{N}^{2}}]
+\end{aligned}
+$$
+
+where, $\bs{a_i^2}=[{a_{i1}^{2u}}, {a_{i2}^{2v}}]^T$.
+
+Finally, the network output is $\bs{A^3}$ ($1 \times N$ matrix), $$
+\begin{aligned}
+\bs{A^3} &= \sigma_{3}(\bs{W_3^T A^2} + \bs{b^3}\;\bs{1^T}))\\
+&= [a_1^3, \ldots, a_N^3].
+\end{aligned}
+$$
+
+# (d)
+
+```{r}
+ #====================================================
+# Split-Brain Network Function
+#====================================================
+U = dat[,4:5]      #Design matrix for left hemisphere
+V = dat[,2:3]     #Design matrix for right hemisphere
+Y = as.matrix(dat[,1])     #Response matrix
+
+
+sig1 = function(z) #Using tanh activation function in hidden layers
+ {
+   return(tanh(z))
+ }
+
+sig2 = function(z) #Using sigmoid activation function on the output layer
+ {
+  return (1 / (1 + exp(-z))) 
+   
+ }
+  
+neural_net = function(U,V,Y,theta,m,nu)
+{
+   # Infer dimensions:
+   N = nrow(U)
+   X = cbind(U,V) #Creating an input matrix consisting of both hemispheres
+   p = dim(X)[2]
+   q = dim(Y)[2]
+
+   # Populating weight and bias matrices:
+   index = 1:(p*m)
+   W1    = matrix(theta[index],p,2*m)
+   index = max(index)+1:(m*2)
+   W2    = matrix(theta[index],2*m,2)
+   index = max(index)+1:(2)
+   W3    = matrix(theta[index],2,q)
+   index = max(index)+1:(2*m)
+   b1    = matrix(theta[index],2*m,1)
+   index = max(index)+1:(2)
+   b2    = matrix(theta[index],2,1)
+   index = max(index)+1:(1)
+   b3    = matrix(theta[index],q,1)
+
+   #This split brain matrix can be evaluated as a normal NN with 
+   #the weights from the U hemisphere to the V hemisphere set to 0 and vice versa
+   W1[1:dim(U)[2],-(1:m)]      = 0 
+   W1[-(1:dim(U)[2]),-(m+1:m)] = 0
+   
+   W2[1:m,2]   =0
+   W2[-(1:m),1]=0
+   
+   
+   
+   # Evaluate the updating equation in matrix form
+   # With the requisite modifications made we can evaluate this as a standard (2m,2) NN.
+
+   ones_t = matrix(1,1,N)
+   A0     = t(X)
+   A1     = sig1(t(W1)%*%A0+b1%*%ones_t)
+   A2     = sig1(t(W2)%*%A1+b2%*%ones_t)
+   A3     = sig2(t(W3)%*%A2+b3%*%ones_t)
+   
+   # Evaluate an appropriate objective function and return some predictions:
+   out = t(A3)
+   E1  = g(out,Y)
+   E2  = E1+(nu/N)*(sum(abs(W1))+sum(abs(W2))+sum(abs(W3)))
+   # Return a list of relevant objects:
+   return(list(out = out, E1 = E1, E2 = E2))
+}
+
+#This objective function is what will be minimised, it returns the CE error
+obj = function(pars) 
+{
+   res = neural_net(U,V,Y,pars,m,nu)
+   return(res$E1)
+}
+
+m     = 5
+p     = 2
+q     = 1
+nu    = 0
+npars = 2*(p*m+m*q+m+q)+3
+theta = runif(npars,-1,1)
+
+```
+
+# (e)
+
+```{r,fig.asp=1,fig.height=4,fig.width=4,fig.cap="The validation error obtained by using the optimal parameter set for different nu values."}
+set.seed(2024)
+ind = sample(1:nrow(dat),floor(0.8*nrow(dat)),replace = F)
+#Splitting the data into a training and validation set
+train_dat_u = U[ind,]
+train_dat_v = V[ind,]
+train_dat_Y = as.matrix(Y[ind,])
+
+val_dat_u = U[-ind,]
+val_dat_v = V[-ind,]
+val_dat_Y = as.matrix(Y[-ind,])
+
+obj_mod = function(pars) #Creating an objective function that uses training data
+{
+   res = neural_net(train_dat_u,train_dat_v,train_dat_Y,pars,m,nu)
+   return(res$E2)
+}
+
+nus       = exp(seq(-10,0,length=15)) #Creating a sequence of nu values
+val_error = numeric(length(nus)) 
+
+for (i in 1:length(nus))
+  {
+    theta_rand   = runif(npars,-1,1) 
+    nu           = nus[i] #Setting the nu value to be used
+    res_opt      =  nlm(obj_mod,theta_rand,iterlim = 500) #Optimising using nu
+    #Getting validation error by using the optimal parameters for a nu
+    val_error[i] = neural_net(val_dat_u,val_dat_v,val_dat_Y,res_opt$estimate,m,nu)$E1 
+}
+
+#Plotting validation error vs nu values
+{plot(val_error~nus,type="l",lwd=2, ylab = "Validation Error", xlab = expression(nu))
+  abline(v=nus[13],col="red",lwd=1)
+ abline(v=nus[which.min(val_error)],col="blue",lwd=1,lty=2) }
+nu=nus[13]
+
+```
+
+The final choice of regularization level was $\nu = `r round(nu,4)`$ as
+indicated by the solid red line . The dashed blue line in Figure 1 shows
+the $\nu$ value that resulted in the lowest validation error, yet a more
+conservative (bigger), $\nu$ value was chosen to reduce to probability
+of overfitting. This choice of $\nu$ is also suitable as the curve is
+relatively flat. Thus, the difference between the minimum validation
+error and the validation error corresponding to the chosen $\nu$ value
+is only marginally different.
+
+\newpage
+
+# (f)
+
+```{r,fig.asp=1,fig.height=4,fig.width=4,fig.cap="The magnitudes of the parameters (weights and biases) for the final regularized split-brain neural network."}
+
+#Fitting the final regularized modelS using the chosen nu value 
+nu=nus[13]
+obj_final = function(pars) #Objective function that uses all data 
+  {res = neural_net(U,V,Y,pars,m,nu)
+  return(res$E2)}
+
+theta_rand = runif(npars,-1,1)
+
+best_pars = nlm(obj_final,theta_rand,iterlim = 1000) #Determining best parameters
+
+#Plotting the absolute magnitudes of the parameters
+{plot(abs(best_pars$estimate),type="h", ylab = "Magnitude of the Parameters")
+ text(1:npars,y=abs(best_pars$estimate)+0.1,labels = 1:npars,cex=0.4)}
+
+```
+
+Figure 2 shows the effects of L1 regularization, as there are many
+parameters that have had their magnitudes shrunk to zero. This
+effectively removes those connections from the network leading to a
+sparser model. The connections between nodes that were shrunk to zero
+can be said to be of lesser or no importance in the functioning of the
+neural network and the corresponding input features have little to no
+predictive power and vice versa. Figure 2 shows that parameter 40 (a
+bias that connects to the first hidden layer in the v-hemisphere) has
+the largest absolute magnitude of all the parameters. Importantly
+parameter 32 (the weight that connects $a_2^{2v}$ to $a_1^{3}$) also has
+a very large absolute magnitude which indicates that the
+$Grammar\_score$ and $Emoji\_score$ inputs are powerful predictors of
+the response variable.
+
+# (g)
+
+```{r,fig.asp=1,fig.height=4,fig.width=4,fig.cap="The response curve over Grammar_Score, Emoji_Score and Lure_Flag = grey, for neutral sentiment."}
+M=200
+#Creating sequences and dummy variables for the lattice
+gram_seq = seq(min(dat$Grammar_Score),max(dat$Grammar_Score),length=M)
+emoji_seq = seq(min(dat$Emoji_Score),max(dat$Emoji_Score),length=M)
+Gram_1 = rep(gram_seq,M)
+Emoji_2= rep(emoji_seq,each=M)
+#Creating data frames to be passed into the NN
+dfV = data.frame(Grammar_score=Gram_1,Emoji_score=Emoji_2) 
+dfU_lure1 = data.frame(Lure_Flag=rep(1,length(Gram_1)),Sentiment=2)
+dfU_lure2 = data.frame(Lure_Flag=rep(2,length(Gram_1)),Sentiment=2)
+dfU_lure3 = data.frame(Lure_Flag=rep(3,length(Gram_1)),Sentiment=2)
+YY = as.matrix(rep(1,length(Gram_1)))
+#Predictions for each different lure flag level
+pred1 = neural_net(dfU_lure1,dfV,YY,best_pars$estimate,m,nu)$out
+
+{plot(Emoji_2~Gram_1,pch=16,col=color.gradient(pred1),
+      xlab="Grammar_Score",ylab="Emoji_Score")
+  text(dat$Emoji_Score~dat$Grammar_Score,
+       labels = ifelse(dat$Lure_Flag==1,
+         ifelse(dat$Spam_Bot==1,"1","0"),""),cex=0.6)}
+```
+
+\newpage
+
+```{r,fig.asp=1,fig.height=4,fig.width=4,fig.cap="The response curve over Grammar_Score, Emoji_Score and Lure_Flag = blue, for neutral sentiment."}
+pred2 = neural_net(dfU_lure2,dfV,YY,best_pars$estimate,m,nu)$out
+{plot(Emoji_2~Gram_1,pch=16,col=color.gradient(pred2),
+      xlab="Grammar_Score",ylab="Emoji_Score")
+  text(dat$Emoji_Score~dat$Grammar_Score,
+       labels = ifelse(dat$Lure_Flag==2,
+         ifelse(dat$Spam_Bot==1,"1","0"),""),cex=0.6)}
+```
+
+\newpage
+
+```{r,fig.asp=1,fig.height=4,fig.width=4,fig.cap="The response curve over Grammar_Score, Emoji_Score and Lure_Flag = red, for neutral sentiment."}
+pred3 = neural_net(dfU_lure3,dfV,YY,best_pars$estimate,m,nu)$out
+{plot(Emoji_2~Gram_1,pch=16,col=color.gradient(pred3),
+      xlab="Grammar_Score",ylab="Emoji_Score")
+  text(dat$Emoji_Score~dat$Grammar_Score,
+       labels = ifelse(dat$Lure_Flag==3,
+         ifelse(dat$Spam_Bot==1,"1","0"),""),cex=0.6)}
+
+```
+
+In Figures 3,4 and 5 the magenta areas indicate where the model predicts
+that the comment was made by a Human ($0$), and lightblue indicates it
+was made by a Robot ($1$). The white areas are where the model is not
+able to clearly distinguish between whether the comment was made by a
+Human or Robot. By superimposing the observed responses, it is clear
+that the model performs fairly well at classifying the comments. This is
+shown by most of the $1$s being in lightblue areas and $0$s being in
+magenta areas. Given that a regularized model is being used, the
+misclassification rate is likely to be higher than an unregularised
+model. However, by regularizing the model we reduce overfitting, leading
+to a model that will generalize better to other datasets due to its
+robustness to variation/noise in the data.
+
+The three response curves, one for each level of the $Lure\_flag$
+variable, show a consistent pattern. This suggests that the level of the
+$Lure\_flag$ variable does not have a great impact on the model
+predictions. The transition from lightblue to magenta in Figure 3 is
+more gradual than in Figures 4 and 5, which suggests a less definitive
+decision boundary for level 1 of the $Lure\_flag$. This is opposed to
+levels 2 and 3 which have much more distinct decision boundaries as
+indicated by the more abrupt transition from lightblue to magenta in
+Figures 4 and 5. Although these differences exist, they are minor, once
+again supporting the argument that the influence of $Lure\_flag$ on
+model performance is negligible.
+
+# (h)
+
+There a multiple practical advantages for using a split-brain network
+over a standard feed-forward architecture. Specialisation is one
+advantage that the standard architecture does not have. This is when
+each hemisphere is able to process different feature sets, so they can
+each 'specialise' in processing different subsets of the data. The
+hemispheres are then able to focus on narrower tasks which reduces the
+network's complexity, improving learning efficiency. This is especially
+so when the features have distinctly different contributions to the
+prediction. In this case, one hemisphere focuses on $Gramar\_Score$ and
+$Emoji\_Score$ and the other focuses on $Lure\_Flag$ and $Sentiment$.
+Thus, each hemisphere can focus on those features specifically.
+Moreover, the hemisphere specialisation facillitates parallel
+processing. The split-brain network processes its inputs in parallel,
+which improves computational efficiency by reducing the computation
+time. This is especially useful when the network deals with large
+datasets or when the task is time-bound and faster processing is
+important.
+
+# (i)
+
+Typically, backpropagation is used in a neural network to compute the
+gradient of a cost/loss function with respect to the weights and biases
+(network parameters). In this case it is used to calculate the partial
+derivatives of the output of the network with respect to the inputs.
+This is used to see how changes in the input values affect the output,
+i.e. the sensitivity of the output to with respect to the inputs.
+Performing backpropagation for this purpose focuses on the ouput
+activation function (instead of the cost function) and propagates its
+derivative back through the network. So, it will compute how each bias
+and weight change affects (changes) the output, and finally how changes
+in the inputs change the output. To actually perform this
+backpropagation, the the chain rule is used for each layer from the
+output moving backwards to the inputs
+
+The appropriate backpropagation equations consist of the linear
+components $\bs{Z^l}$, the working gradients $\bs{\Delta^l}$, the
+weights $\bs{W_l}$, the biases $\bs{b^l}$, and the activation functions
+$\bs{A^l}$ for the $l^{th}$ layer. The weights, biases and activation
+functions were defined previously in (c).
+
+The linear components $\bs{Z^l}$ ($d_l \times N$ matrix, where $d_l$ is
+the number of elements in the layer) are represented as, $$
+\begin{aligned}
+\bs{Z^l} &= \bs{W_l^T A^l-1} + \bs{b^1}\;\bs{1^T}\\
+&= [\bs{z_1^l}, \ldots, \bs{z_N^l}]
+\end{aligned}
+$$ where, $\bs{z_i^l} = [z_1^l, \ldots , z_{d_l}^l]^T.$
+
+The working gradients $\bs{\Delta^l}$ ($d_l \times N$ matrix) are
+represented as, $$
+\begin{aligned}
+\bs{\Delta^l} &= [\bs{\delta_1^l}, \ldots, \bs{\delta_N^l}]\\
+\end{aligned}
+$$ where, $\bs{\delta_i^l} = [\delta_1^l, \ldots, \delta_{d_l}^l]^T.$
+
+The backpropagation process is, $$
+\begin{aligned}
+\bs{\Delta^3} &= \frac{\delta \bs{C}}{\delta\bs{A^3}} \odot \sigma_3'(\bs{Z^3})\\
+\bs{\Delta^2} &= \bs{W_3^T \Delta^3} \odot \sigma_2'(\bs{Z^2}) \\
+\bs{\Delta^1} &= \bs{W_2^T \Delta^2} \odot \sigma_1'(\bs{Z^1}).
+\end{aligned}
+$$
+
+Thus, the full backpropagation equation, calculating the partial
+derivatives of the output layer with respect to the inputs is, $$
+\begin{aligned}
+\frac{\delta\bs{A^3}}{\delta\bs{X}} &= \bs{W_1^T} \cdot ((\bs{W_2^T} \cdot (( \bs{W_3^T} \cdot \Delta^3) \odot \sigma_2'(\bs{Z^2}))) \odot \sigma_1'(\bs{Z^1})).\\
+\end{aligned}
+$$
