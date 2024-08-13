@@ -1,0 +1,2 @@
+This project focused on coding up a Binary Classification Neural Network from scratch in order to understand the fundamental workings of a Neural Network's components and the effects thereof. These components included the weights, biases, activation functions, regularized objective functions, and optimization techniques to obtain the optimal NN parameters. Although one would usually use packages to implement a NN, I felt that doing it from first principles enhanced my understanding making the use of packages such as h2o a much simpler task.
+
